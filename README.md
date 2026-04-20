@@ -1,82 +1,99 @@
 # Act Generator
 
-Система генерации актов выполненных работ на основе входящих счетов.
+Python-скрипт для генерации актов сдачи-приёмки услуг на основе счёт-договоров.
+
+## Быстрый старт
+
+```bash
+git clone https://github.com/SapraudnyNew/act-generator.git
+cd act-generator
+pip3 install -r requirements.txt
+python3 create_template.py   # создать шаблон
+python3 test_run_XXXX.py     # сгенерировать акт
+open "Акт к Счет-договору № XXXX от ДД.ММ.ГГГГ г.docx"
+```
 
 ## Архитектура
 
 ```
-invoice (pdf/doc/txt)
-       │
-       ▼
-┌─────────────┐
-│  extractor  │  Claude Sonnet 4.6 via OpenRouter
-│             │  → строгий JSON с реквизитами
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│  validator  │  часы × ставка, обязательные поля
-│             │  интерактивный запрос недостающего
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│  assembler  │  вставка переменных в docx-шаблон
-│             │  генерация QR-кода
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│   drive     │  загрузка на Google Drive (ADC/gcloud)
-│  uploader   │  → прямая ссылка
-└─────────────┘
+счёт-договор (PDF) + реквизиты заказчика
+        ↓
+  extractor.py   — Claude Sonnet via OpenRouter → строгий JSON
+        ↓
+  validator.py   — проверка полей, hours × rate = total, интерактивный запрос
+        ↓
+  assembler.py   — подстановка тегов {{...}} в template.docx
+        ↓
+  drive_uploader.py — загрузка на Google Drive (ADC/gcloud) → ссылка
 ```
 
-## Структура проекта
+## Правила (обязательно читать перед каждым актом)
 
+### Поля подписанта
+| Поле | Падеж | Пример | Где используется |
+|------|-------|--------|-----------------|
+| `position` | родительный | «генерального директора» | вводный абзац |
+| `signatory` | родительный | «Мартынова Дмитрия Сергеевича» | вводный абзац |
+| `signatory_short` | именительный, кратко | «Мартынов Д.С.» | строка подписи |
+| `authority` | родительный | «Устава» или «Доверенности № 6 от 04.04.2025 г.» | вводный абзац |
+
+### Дата акта
+Дата акта = дата **окончания** услуг из счёт-договора (не дата договора).
+
+### Ссылка на материалы
+Поле `payment_link` — уникальная ссылка для каждого счёта. **Запрашивать отдельно** — не использовать ссылку от предыдущего акта.
+
+### Имя файла
+`Акт к Счет-договору № {invoice_number} от {invoice_date}г.docx`
+
+### Банковские реквизиты заказчика
+Если не указаны в счёт-договоре — запросить отдельным файлом (карточка предприятия или реквизиты текстом).
+
+## JSON-схема (все поля)
+
+```json
+{
+  "invoice_number":    "1131",
+  "invoice_date":      "25.02.2026",
+  "act_date":          "23.03.2026",
+  "service_name":      "консультационные услуги по теме «...»",
+  "hours":             15,
+  "hours_text":        "пятнадцать",
+  "rate":              6600,
+  "total_amount":      "99 000,00",
+  "total_amount_text": "Девяносто девять тысяч",
+  "currency":          "RUB",
+  "payment_link":      "https://...",
+  "client": {
+    "name":              "ООО «...»",
+    "inn":               "...",
+    "kpp":               "...",
+    "address":           "...",
+    "signatory":         "Фамилии Имени Отчества (род. падеж)",
+    "signatory_short":   "Фамилия И.О.",
+    "position":          "должности (род. падеж)",
+    "authority":         "Устава | Доверенности № X от ДД.ММ.ГГГГ г.",
+    "bank_account":      "...",
+    "bank_name":         "...",
+    "bank_corr_account": "...",
+    "bank_bik":          "...",
+    "phone":             "..."
+  }
+}
 ```
-act-generator/
-├── extractor.py       # LLM-экстрактор данных из счёта
-├── validator.py       # Валидация логики и реквизитов
-├── assembler.py       # Сборка итогового docx
-├── drive_uploader.py  # Загрузка на Google Drive
-├── main.py            # Точка входа
-├── template.docx      # Шаблон акта (добавить вручную)
-├── requirements.txt
-└── .env.example
-```
 
-## Установка
+## Исполнитель (жёстко в шаблоне)
+ООО «Персонально Ваш», ИНН 9710037361, КПП 771001001  
+Генеральный директор Марушевская Виктория  
+р/с 40702810600000053430, АО «Райффайзенбанк», БИК 044525700
 
-```bash
-pip install -r requirements.txt
-```
-
-## Аутентификация Google Drive
-
-Используется Application Default Credentials через gcloud CLI:
-
-```bash
-gcloud auth application-default login
-```
-
-Либо через переменную окружения:
-
-```bash
-export GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json
-```
-
-## Использование
-
-```bash
-python main.py --invoice invoice.pdf --folder-id YOUR_DRIVE_FOLDER_ID
-```
-
-## Переменные окружения
-
-Скопируй `.env.example` в `.env` и заполни:
-
-```
-OPENROUTER_API_KEY=your_key_here
-DRIVE_FOLDER_ID=your_google_drive_folder_id
-```
+## Файлы проекта
+| Файл | Назначение |
+|------|-----------|
+| `create_template.py` | генерирует `template.docx` |
+| `extractor.py` | LLM-экстрактор данных из счёта |
+| `validator.py` | валидация + интерактивный запрос |
+| `assembler.py` | сборка docx из шаблона |
+| `drive_uploader.py` | загрузка на Google Drive |
+| `main.py` | точка входа (полный pipeline) |
+| `test_run_XXXX.py` | тестовый прогон для конкретного счёта |
