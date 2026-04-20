@@ -2,14 +2,12 @@
 assembler.py
 
 Сборка итогового docx-акта из шаблона.
-QR-код не используется — ссылка передаётся текстом в пункте 3.
 
 Правила полей подписанта:
-  signatory        — родительный падеж, полное ФИО (для вводного абзаца)
-                     пример: «Мартынова Дмитрия Сергеевича»
-  signatory_short  — именительный падеж, Фамилия И.О. (для строки подписи)
-                     пример: «Мартынов Д.С.»
-  Оба поля передаются явно из data — автогенерация не используется.
+  signatory        — родительный падеж, полное ФИО (вводный абзац)
+  signatory_short  — именительный, Фамилия И.О. (строка подписи)
+  authority        — «Устава» / «Доверенности № X от...» / пустая строка для ИП
+                     Если пусто — фраза «действующего на основании ...» убирается целиком
 
 Правило имени файла:
   «Акт к Счет-договору № {invoice_number} от {invoice_date}г.docx»
@@ -18,6 +16,7 @@ QR-код не используется — ссылка передаётся т
 from __future__ import annotations
 
 import copy
+import re
 from pathlib import Path
 from typing import Any
 
@@ -29,7 +28,6 @@ from docx import Document
 # ---------------------------------------------------------------------------
 
 def _flatten(data: dict[str, Any], prefix: str = "") -> dict[str, str]:
-    """Разворачивает вложенный dict в плоский: {"contractor.name": "..."}."""
     result: dict[str, str] = {}
     for k, v in data.items():
         full_key = f"{prefix}{k}" if prefix else k
@@ -42,22 +40,29 @@ def _flatten(data: dict[str, Any], prefix: str = "") -> dict[str, str]:
     return result
 
 
-def _replace_in_paragraph(paragraph, replacements: dict[str, str]) -> None:
-    """Заменяет {{KEY}} в параграфе, сохраняя форматирование первого рана."""
-    full_text = "".join(run.text for run in paragraph.runs)
-    new_text = full_text
+def _apply_replacements(text: str, replacements: dict[str, str]) -> str:
+    """Заменяет {{KEY}} → value. Если authority пусто — убирает фразу целиком."""
     for key, value in replacements.items():
-        new_text = new_text.replace(f"{{{{{key}}}}}", value)
+        text = text.replace(f"{{{{{key}}}}}", value)
+
+    # Убираем «, действующего на основании ,» и похожие артефакты когда authority пусто
+    text = re.sub(r",?\s*действующ\w+ на основании\s*,", ",", text)
+    text = re.sub(r",?\s*действующ\w+ на основании\s*\.?$", "", text)
+    # Убираем двойные запятые и пробелы
+    text = re.sub(r",\s*,", ",", text)
+    text = re.sub(r"\s{2,}", " ", text)
+    return text
+
+
+def _replace_in_paragraph(paragraph, replacements: dict[str, str]) -> None:
+    full_text = "".join(run.text for run in paragraph.runs)
+    new_text = _apply_replacements(full_text, replacements)
     if new_text != full_text:
         for i, run in enumerate(paragraph.runs):
             run.text = new_text if i == 0 else ""
 
 
 def _make_filename(data: dict[str, Any]) -> str:
-    """
-    Генерирует имя файла по правилу:
-    «Акт к Счет-договору № {invoice_number} от {invoice_date}г.docx»
-    """
     num = data.get("invoice_number", "")
     date = data.get("invoice_date", "")
     return f"Акт к Счет-договору № {num} от {date}г.docx"
@@ -72,19 +77,6 @@ def assemble(
     template_path: str | Path = "template.docx",
     output_path: str | Path | None = None,
 ) -> Path:
-    """
-    Собирает документ акта из шаблона и данных.
-
-    Args:
-        data:          Валидированный JSON-словарь.
-                       client.signatory        — родительный падеж (шапка)
-                       client.signatory_short  — именительный Фамилия И.О. (подпись)
-        template_path: Путь к шаблону .docx.
-        output_path:   Куда сохранить результат. Если None — имя генерируется автоматически.
-
-    Returns:
-        Path к готовому файлу.
-    """
     template_path = Path(template_path)
     if not template_path.exists():
         raise FileNotFoundError(f"Шаблон не найден: {template_path}")
