@@ -14,7 +14,7 @@ data = {
     "total_amount":      "85 000,00",
     "total_amount_text": "Восемьдесят пять тысяч",
     "currency":          "RUB",
-    "payment_link":      "https://read.paperflite.com/collections/69a13888b480446d80a2f659",
+    "payment_link":      "https://read.paperflite.com/collections/69a138c781372d5611f43ad2",
     "client": {
         "name":              "ООО «Клининг 911»",
         "inn":               "6731071625",
