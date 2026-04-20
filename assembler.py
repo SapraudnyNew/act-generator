@@ -3,10 +3,18 @@ assembler.py
 
 Сборка итогового docx-акта из шаблона.
 QR-код не используется — ссылка передаётся текстом в пункте 3.
+
+Правила полей подписанта:
+  signatory        — родительный падеж, полное ФИО (для вводного абзаца)
+                     пример: «Мартынова Дмитрия Сергеевича»
+  signatory_short  — именительный падеж, Фамилия И.О. (для строки подписи)
+                     пример: «Мартынов Д.С.»
+  Оба поля передаются явно из data — автогенерация не используется.
 """
 
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 from typing import Any
 
@@ -29,19 +37,6 @@ def _flatten(data: dict[str, Any], prefix: str = "") -> dict[str, str]:
         else:
             result[full_key] = str(v)
     return result
-
-
-def _short_name(full_name: str) -> str:
-    """
-    Преобразует полное ФИО в формат «Фамилия И.О.»
-    Например: «Малышев Максим Вадимович» → «Малышев М.В.»
-    Работает для 2 и 3 слов.
-    """
-    parts = full_name.strip().split()
-    if len(parts) == 1:
-        return full_name
-    initials = "".join(p[0].upper() + "." for p in parts[1:])
-    return f"{parts[0]} {initials}"
 
 
 def _replace_in_paragraph(paragraph, replacements: dict[str, str]) -> None:
@@ -68,7 +63,9 @@ def assemble(
     Собирает документ акта из шаблона и данных.
 
     Args:
-        data:          Валидированный JSON-словарь из validator.
+        data:          Валидированный JSON-словарь.
+                       client.signatory        — родительный падеж (шапка)
+                       client.signatory_short  — именительный Фамилия И.О. (подпись)
         template_path: Путь к шаблону .docx.
         output_path:   Куда сохранить результат. Если None — генерируется автоматически.
 
@@ -84,19 +81,11 @@ def assemble(
         output_path = Path(f"act_{inv}.docx")
     output_path = Path(output_path)
 
-    # Добавляем короткие имена подписантов
-    import copy
     data = copy.deepcopy(data)
-    for party in ("contractor", "client"):
-        p = data.get(party, {})
-        if p.get("signatory"):
-            p["signatory_short"] = _short_name(p["signatory"])
-
     flat = _flatten(data)
 
     doc = Document(str(template_path))
 
-    # Обход всех параграфов (включая ячейки таблиц)
     all_paragraphs = list(doc.paragraphs)
     for table in doc.tables:
         for row in table.rows:
