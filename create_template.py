@@ -4,6 +4,7 @@ create_template.py
 Генерирует template.docx на основе реальной структуры акта сдачи-приёмки услуг.
 Реквизиты исполнителя прописаны жёстко.
 Реквизиты заказчика — теги {{client.*}}.
+QR-код убран — ссылка только текстом.
 
 Запуск:
     python3 create_template.py
@@ -36,10 +37,6 @@ CONTRACTOR = {
     "phone":             '+7 495 128 2110',
 }
 
-
-# ---------------------------------------------------------------------------
-# Вспомогательные функции
-# ---------------------------------------------------------------------------
 
 def set_cell_border(cell, **kwargs):
     tc = cell._tc
@@ -76,14 +73,9 @@ def add_paragraph(doc, text='', bold=False, size=11,
     return p
 
 
-# ---------------------------------------------------------------------------
-# Основная функция
-# ---------------------------------------------------------------------------
-
 def make_template():
     doc = Document()
 
-    # Поля страницы
     section = doc.sections[0]
     section.page_width = Cm(21)
     section.page_height = Cm(29.7)
@@ -92,12 +84,12 @@ def make_template():
     section.top_margin = Cm(2)
     section.bottom_margin = Cm(2)
 
-    # --- Заголовок ---
+    # Заголовок
     add_paragraph(doc,
         'Акт сдачи-приёмки услуг к Счет-договору № {{invoice_number}} от {{invoice_date}}г.',
         bold=True, size=13, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=4)
 
-    # --- Город и дата (г. Москва слева, дата справа) ---
+    # Город и дата
     p2 = doc.add_paragraph()
     p2.paragraph_format.space_before = Pt(0)
     p2.paragraph_format.space_after = Pt(10)
@@ -112,7 +104,7 @@ def make_template():
     tabs.append(tab_el)
     pPr.append(tabs)
 
-    # --- Вводный абзац ---
+    # Вводный абзац
     c = CONTRACTOR
     intro = (
         f'{c["name"]}, именуемое в дальнейшем «Исполнитель», '
@@ -127,7 +119,7 @@ def make_template():
     )
     add_paragraph(doc, intro, size=11, space_after=8)
 
-    # --- Пункты ---
+    # Пункты
     add_paragraph(doc,
         '1. Исполнитель оказал {{service_name}} – {{hours}} ({{hours_text}}) часов.',
         size=11, space_after=6)
@@ -154,14 +146,13 @@ def make_template():
         '5. Акт составлен в двух экземплярах, по одному для каждой из сторон.',
         size=11, space_after=14)
 
-    # --- Таблица реквизитов ---
+    # Таблица реквизитов
     tbl = doc.add_table(rows=1, cols=2)
     tbl.style = 'Table Grid'
     tbl.autofit = False
     tbl.columns[0].width = Cm(8.5)
     tbl.columns[1].width = Cm(8.5)
 
-    # Исполнитель — жёсткие данные
     cell_c = tbl.rows[0].cells[0]
     cell_c.vertical_alignment = WD_ALIGN_VERTICAL.TOP
     contractor_lines = [
@@ -184,7 +175,6 @@ def make_template():
         p.paragraph_format.space_after = Pt(2)
         add_run(p, text, bold=bold, size=10)
 
-    # Заказчик — теги
     cell_cl = tbl.rows[0].cells[1]
     cell_cl.vertical_alignment = WD_ALIGN_VERTICAL.TOP
     client_lines = [
@@ -209,7 +199,7 @@ def make_template():
 
     doc.add_paragraph()
 
-    # --- Таблица подписей ---
+    # Таблица подписей — используем короткий формат {{client.signatory_short}}
     sig_tbl = doc.add_table(rows=3, cols=2)
     sig_tbl.autofit = False
     sig_tbl.columns[0].width = Cm(8.5)
@@ -226,7 +216,7 @@ def make_template():
     sig_cell(sig_tbl.rows[1].cells[0], c['position'].capitalize())
     sig_cell(sig_tbl.rows[1].cells[1], '{{client.position}}')
     sig_cell(sig_tbl.rows[2].cells[0], f'Подпись _________________ / {c["signatory_short"]} /  М.П.')
-    sig_cell(sig_tbl.rows[2].cells[1], 'Подпись _________________ / {{client.signatory}} /  М.П.')
+    sig_cell(sig_tbl.rows[2].cells[1], 'Подпись _________________ / {{client.signatory_short}} /  М.П.')
 
     for row in sig_tbl.rows:
         for cell in row.cells:
