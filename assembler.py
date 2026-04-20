@@ -10,6 +10,9 @@ QR-код не используется — ссылка передаётся т
   signatory_short  — именительный падеж, Фамилия И.О. (для строки подписи)
                      пример: «Мартынов Д.С.»
   Оба поля передаются явно из data — автогенерация не используется.
+
+Правило имени файла:
+  «Акт к Счет-договору № {invoice_number} от {invoice_date}г.docx»
 """
 
 from __future__ import annotations
@@ -50,6 +53,16 @@ def _replace_in_paragraph(paragraph, replacements: dict[str, str]) -> None:
             run.text = new_text if i == 0 else ""
 
 
+def _make_filename(data: dict[str, Any]) -> str:
+    """
+    Генерирует имя файла по правилу:
+    «Акт к Счет-договору № {invoice_number} от {invoice_date}г.docx»
+    """
+    num = data.get("invoice_number", "")
+    date = data.get("invoice_date", "")
+    return f"Акт к Счет-договору № {num} от {date}г.docx"
+
+
 # ---------------------------------------------------------------------------
 # Главная функция
 # ---------------------------------------------------------------------------
@@ -67,7 +80,7 @@ def assemble(
                        client.signatory        — родительный падеж (шапка)
                        client.signatory_short  — именительный Фамилия И.О. (подпись)
         template_path: Путь к шаблону .docx.
-        output_path:   Куда сохранить результат. Если None — генерируется автоматически.
+        output_path:   Куда сохранить результат. Если None — имя генерируется автоматически.
 
     Returns:
         Path к готовому файлу.
@@ -77,8 +90,7 @@ def assemble(
         raise FileNotFoundError(f"Шаблон не найден: {template_path}")
 
     if output_path is None:
-        inv = data.get("invoice_number", "act").replace("/", "-").replace(" ", "_")
-        output_path = Path(f"act_{inv}.docx")
+        output_path = Path(_make_filename(data))
     output_path = Path(output_path)
 
     data = copy.deepcopy(data)
